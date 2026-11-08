@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BIOLUMINESCENT DEEP // Atmospheric Survival Simulation</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #010409;
+            color: #38bdf8;
+        }
+
+        #webgl-canvas {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .hud-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+        }
+
+        .hud-card {
+            background: rgba(9, 14, 26, 0.85);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            backdrop-filter: blur(12px);
+            padding: 16px;
+            border-radius: 12px;
+            max-width: 320px;
+            pointer-events: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9);
+        }
+
+        h1 {
+            font-size: 0.95rem;
+            letter-spacing: 1.5px;
+            color: #f43f5e;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            margin-bottom: 6px;
+            color: #cbd5e1;
+        }
+
+        .status-val {
+            color: #38bdf8;
+            font-weight: bold;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(135deg, #e11d48, #9333ea);
+            border: none;
+            color: #fff;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 10px;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .vignette {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 5;
+            pointer-events: none;
+            background: radial-gradient(circle, transparent 40%, rgba(0, 0, 0, 0.95) 100%);
+        }
+    </style>
+
+    <!-- Three.js and OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <canvas id="webgl-canvas"></canvas>
+    <div class="vignette"></div>
+
+    <div class="hud-overlay">
+        <div class="hud-card">
+            <h1>DEEP BIOLUMINESCENCE</h1>
+            <div class="status-row">
+                <span>LIGHT SPECTRUM:</span>
+                <span class="status-val" id="spectralState">CYAN GLOW</span>
+            </div>
+            <div class="status-row">
+                <span>DEPTH LEVEL:</span>
+                <span class="status-val">4,200 METERS</span>
+            </div>
+            <div class="status-row">
+                <span>ENTITY ACTIVITY:</span>
+                <span class="status-val" style="color: #4ade80;">ACTIVE</span>
+            </div>
+            <button class="btn" onclick="pulseBioluminescence()">PULSE ENERGY BEAM</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. THREE.JS ENGINE SETUP ---
+        const canvas = document.getElementById('webgl-canvas');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x010409, 0.045);
+
+        const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2, 10);
+
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // --- 2. LIGHTING & ATMOSPHERE ---
+        const ambientLight = new THREE.AmbientLight(0x0284c7, 0.4);
+        scene.add(ambientLight);
+
+        const coreLight = new THREE.PointLight(0x38bdf8, 5, 20);
+        coreLight.position.set(0, 0, 0);
+        scene.add(coreLight);
+
+        const secondaryLight = new THREE.PointLight(0xf43f5e, 3, 15);
+        secondaryLight.position.set(3, 2, -2);
+        scene.add(secondaryLight);
+
+        // --- 3. BIOLUMINESCENT SWARM & TENTACLE CORE ---
+        const particleCount = 2500;
+        const particleGeo = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const colors = new Float32Array(particleCount * 3);
+        const originalPos = new Float32Array(particleCount * 3);
+
+        for (let i = 0; i < particleCount; i++) {
+            let u = Math.random() * Math.PI * 2;
+            let v = (Math.random() - 0.5) * Math.PI;
+            let r = 2.0 + Math.random() * 3.5;
+
+            let x = r * Math.cos(v) * Math.cos(u);
+            let y = r * Math.cos(v) * Math.sin(u);
+            let z = r * Math.sin(v);
+
+            positions[i * 3] = x;
+            positions[i * 3 + 1] = y;
+            positions[i * 3 + 2] = z;
+
+            originalPos[i * 3] = x;
+            originalPos[i * 3 + 1] = y;
+            originalPos[i * 3 + 2] = z;
+
+            colors[i * 3] = 0.1;
+            colors[i * 3 + 1] = 0.7;
+            colors[i * 3 + 2] = 1.0;
+        }
+
+        particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        particleGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const particleMat = new THREE.PointsMaterial({
+            size: 0.08,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.9,
+            blending: THREE.AdditiveBlending
+        });
+
+        const bioluminescentSwarm = new THREE.Points(particleGeo, particleMat);
+        scene.add(bioluminescentSwarm);
+
+        // --- 4. CENTRAL GLOWING ENTITY CORE ---
+        const coreGeo = new THREE.IcosahedronGeometry(1.2, 2);
+        const coreMat = new THREE.MeshBasicMaterial({
+            color: 0x38bdf8,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.6
+        });
+        const entityCore = new THREE.Mesh(coreGeo, coreMat);
+        scene.add(entityCore);
+
+        // --- 5. INTERACTIVE PULSE EFFECT ---
+        let pulseIntensity = 0;
+
+        function pulseBioluminescence() {
+            pulseIntensity = 5.0;
+            document.getElementById('spectralState').innerText = "CRIMSON BURST";
+            setTimeout(() => {
+                document.getElementById('spectralState').innerText = "CYAN GLOW";
+            }, 1500);
+        }
+
+        // --- 6. ANIMATION LOOP ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const elapsedTime = clock.getElapsedTime();
+            const posAttr = particleGeo.attributes.position;
+            const colAttr = particleGeo.attributes.color;
+
+            for (let i = 0; i < particleCount; i++) {
+                let ox = originalPos[i * 3];
+                let oy = originalPos[i * 3 + 1];
+                let oz = originalPos[i * 3 + 2];
+
+                // Undulating organic wave displacement
+                let wave = Math.sin(ox * 2.0 + elapsedTime * 1.5) * Math.cos(oy * 2.0 + elapsedTime * 1.5);
+                posAttr.setXYZ(
+                    i,
+                    ox + wave * 0.3,
+                    oy + Math.sin(elapsedTime + oz) * 0.2,
+                    oz + Math.cos(elapsedTime + ox) * 0.2
+                );
+
+                // Dynamic color shifts
+                if (pulseIntensity > 0.5) {
+                    colAttr.setXYZ(i, 1.0, 0.1, 0.3); // Crimson Pulse
+                } else {
+                    colAttr.setXYZ(
+                        i,
+                        Math.abs(Math.sin(elapsedTime * 0.5 + ox)) * 0.2,
+                        Math.abs(Math.cos(elapsedTime * 0.8 + oy)) * 0.8,
+                        1.0
+                    );
+                }
+            }
+
+            posAttr.needsUpdate = true;
+            colAttr.needsUpdate = true;
+
+            // Rotate core entity
+            entityCore.rotation.y = elapsedTime * 0.2;
+            entityCore.rotation.x = Math.sin(elapsedTime * 0.1) * 0.3;
+
+            // Handle Light pulse decay
+            if (pulseIntensity > 0) pulseIntensity -= 0.08;
+            coreLight.intensity = 4.0 + Math.sin(elapsedTime * 3.0) * 2.0 + pulseIntensity;
+            secondaryLight.intensity = 2.0 + pulseIntensity * 1.5;
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
